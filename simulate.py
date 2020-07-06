@@ -80,10 +80,11 @@ def main():
 
     rejections = simulate(args.test, args.one_sided, S, Beta, size, iters, n, lam0)
 
+    params = ',n=' + str(n) + ',lam0=' + str(lam0) + ',one_sided=' + str(args.one_sided) + ',test=' + args.test
     if args.out_type == 'pickle':
         import pickle
         import uuid
-        filename = str(uuid.uuid4()) + ',one_sided=' + str(args.one_sided) + ',test=' + args.test + '.p'
+        filename = str(uuid.uuid4()) + params + '.p'
         pickle.dump([iters, rejections], open(filename, 'wb' ), protocol=2)
     elif args.out_type == 'plot':
         import matplotlib.pyplot as plt
@@ -97,9 +98,10 @@ def main():
         plt.tick_params(axis='y', labelsize=5)
         plt.xlabel(r'$\beta$')
         plt.ylabel('s')
-        plt.title('1 - power (type II error)')
+        plt.title('1 - power (type II error) params=[' + params + ']', fontsize=8)
         #plt.savefig('heatmap1.pdf')
-        plt.show()
+        plt.savefig(params + '.png')
+        #plt.show()
     else:
         raise Exception('Unrecognized out_type')
 
