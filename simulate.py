@@ -1,10 +1,12 @@
 import numpy as np
 import scipy.special
+import scipy.stats
 import argparse
 import sys
 from tqdm import tqdm
 
 def simulate(test, one_sided, S, Beta, size, iters, n, lam0):
+    alpha = .05
     rejections = np.zeros(size)
     for i in tqdm(range(len(Beta))):
         for j in tqdm(range(len(S))):
@@ -24,34 +26,35 @@ def simulate(test, one_sided, S, Beta, size, iters, n, lam0):
             poisson = poisson[indices, np.arange(iters*n)]
             poisson = poisson.reshape([iters, n])
 
-            '''
-            exit()
-            if one_sided == 1:
-
-                uni = np.random.uniform(size=n)
-
-                mask0 = np.greater(1. - nBeta, uni).astype(np.float64)
-                mask1 = np.greater_equal(uni, 1. - nBeta).astype(np.float64)
-
-                poisson = mask0 * poisson0 + mask1 * poisson1
-            else:
-                poisson2 = np.random.poisson(lam=np.maximum(0., lam0 - lam0**.5 * ns), size=n)
-
-                uni = np.random.uniform(size=n)
-
-                mask0 = np.logical_and(0. <= uni, 1. - nBeta > uni).astype(np.float64)
-                mask1 = np.logical_and(1. - nBeta <= uni, 1. - .5 * nBeta > uni).astype(np.float64)
-                mask2 = np.logical_and(1. - .5 * nBeta <= uni, 1. > uni).astype(np.float64)
-
-                poisson = mask0 * poisson0 + mask1 * poisson1 + mask2 * poisson2
-            '''
-
             if test == 'chi_squared':
                 D = (np.square(poisson - lam0) / lam0).sum(axis=-1)
-                rejections[len(S) - 1 - j, i] = (scipy.special.gammainc(n / 2., D / 2.) > .95).astype(np.float64).mean()
+                rejs = (scipy.special.gammainc(n / 2., D / 2.) > 1. - alpha).astype(np.float64)
             elif test == 'lrt':
                 xbar = poisson.mean(axis=-1)
-                rejections[len(S) - 1 - j, i] = (2.*n*(lam0 - xbar + xbar*np.log(xbar/lam0)) >= scipy.special.gammaincinv(.5, .95)*2.).astype(np.float64).mean()
+                rejs = (2.*n*(lam0 - xbar + xbar*np.log(xbar/lam0)) >= scipy.special.gammaincinv(.5, 1. - alpha)*2.).astype(np.float64)
+            elif test == 'max':
+                D = np.amax(np.abs((poisson - lam0) / lam0 ** .5), axis=-1)
+                rejs = (scipy.stats.norm.cdf(D) > 1. - alpha / 2.).astype(np.float64)
+            elif test == 'fisher':
+                pvalues = scipy.stats.poisson.cdf(lam0 - np.abs(poisson - lam0), lam0) +\
+                          1. - scipy.stats.poisson.cdf(lam0 + np.abs(poisson - lam0), lam0)
+                rejs = (scipy.stats.chi2.cdf(-2. * np.log(pvalues).sum(axis=-1), 2 * n) > 1. - alpha).astype(np.float64)
+            elif test == 'hc':
+                pvalues = scipy.stats.poisson.cdf(lam0 - np.abs(poisson - lam0), lam0) +\
+                          1. - scipy.stats.poisson.cdf(lam0 + np.abs(poisson - lam0), lam0)
+                pvalues_sorted = np.sort(pvalues, axis=-1)
+                num = n**.5 * ((np.arange(n) + 1) / float(n) - pvalues_sorted)
+                den = np.sqrt(pvalues_sorted * (1. - pvalues_sorted))
+
+                num = num[:, :int(n / 2.)]
+                den = den[:, :int(n / 2.)]
+
+                assert np.all(den > 0.)
+
+                hc = num / den
+
+                rejs = (np.amax(hc, axis=-1) > np.sqrt(2. * np.log(np.log(float(n))))).astype(np.float64)
+            rejections[len(S) - 1 - j, i] = rejs.mean()
     return rejections
 
 def main():
@@ -60,8 +63,7 @@ def main():
     parser.add_argument('--n', type=int, default=1000000)
     parser.add_argument('--lam0', type=float, default=15.)
     parser.add_argument('--one_sided', type=int, choices=[0, 1], default=0)
-    parser.add_argument('--mem_intense', type=int, choices=[0, 1], default=0)
-    parser.add_argument('--test', type=str, choices=['chi_squared', 'lrt'], default='chi_squared')
+    parser.add_argument('--test', type=str, choices=['chi_squared', 'lrt', 'max', 'fisher', 'hc'], default='chi_squared')
     parser.add_argument('--out_type', type=str, choices=['pickle', 'plot'], default='pickle')
     args = parser.parse_args()
 
@@ -75,7 +77,6 @@ def main():
     iters = args.iters
     n = args.n
     lam0 = args.lam0
-    mem_intense = args.mem_intense
 
     rejections = simulate(args.test, args.one_sided, S, Beta, size, iters, n, lam0)
 
@@ -83,7 +84,7 @@ def main():
         import pickle
         import uuid
         filename = str(uuid.uuid4()) + ',one_sided=' + str(args.one_sided) + ',test=' + args.test + '.p'
-        pickle.dump([iters, rejections], open(filename, 'wb' ))
+        pickle.dump([iters, rejections], open(filename, 'wb' ), protocol=2)
     elif args.out_type == 'plot':
         import matplotlib.pyplot as plt
         import seaborn as sns
@@ -96,7 +97,7 @@ def main():
         plt.tick_params(axis='y', labelsize=5)
         plt.xlabel(r'$\beta$')
         plt.ylabel('s')
-        plt.title('1 - power (type II error), params:[lam0=5,n=10]')
+        plt.title('1 - power (type II error)')
         #plt.savefig('heatmap1.pdf')
         plt.show()
     else:
