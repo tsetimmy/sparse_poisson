@@ -98,7 +98,7 @@ def main():
         plt.tick_params(axis='y', labelsize=5)
         plt.xlabel(r'$\beta$')
         plt.ylabel('s')
-        plt.title('1 - power (type II error) params=[' + params + ']', fontsize=8)
+        plt.title('1 - power (type II error) params:[' + params + ']', fontsize=8)
         #plt.savefig('heatmap1.pdf')
         plt.savefig(params + '.png')
         #plt.show()

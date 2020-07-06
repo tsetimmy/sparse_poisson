@@ -13,6 +13,7 @@ def main():
     print(sys.argv)
     print(args)
 
+    params = args.filename.split('.p')[0]
     sum1, sum2 = pickle.load(open(args.filename, 'rb'), encoding='bytes')
 
     heatmap = 1. - sum2 / float(sum1)
@@ -21,9 +22,10 @@ def main():
     plt.tick_params(axis='y', labelsize=5)
     plt.xlabel(r'$\beta$')
     plt.ylabel('s')
-    plt.title('1 - power (type II error), params:[lam0=15,n=1000000]')
+    plt.title('1 - power (type II error), params:[' + params + ']', fontsize=8)
     #plt.savefig('heatmap0.pdf')
-    plt.show()
+    plt.savefig(params + '.png')
+    #plt.show()
     
 if __name__ == '__main__':
     main()
